@@ -1,543 +1,1032 @@
-    # AegisRed Technical Documentation
+# AegisRed Technical Documentation
 
-## 1. Overview
+## 1. Project Overview
 
-AegisRed is an automated red-teaming pipeline designed to evaluate the security of AI agents that expose tools or external capabilities.
+AegisRed is an automated AI-agent red-teaming pipeline designed to test
+whether an AI agent can be manipulated into performing unsafe actions or
+disclosing information that it should protect.
 
-The pipeline combines:
+The project combines a custom offensive attack-generation model with
+automated target execution, LLM-based vulnerability verification,
+adaptive testing, evidence collection, finding aggregation, and report
+generation.
 
-* Target reconnaissance
-* Attack-surface identification
-* LLM-based attack generation
-* Automated attack execution
-* Response analysis
-* Adaptive attack attempts
-* Evidence collection
-* Vulnerability verification
-* Finding aggregation
-* Security report generation
+The current implementation is designed around the following flow:
 
-The current target used for assessment is CodeBot.
-
----
-
-## 2. System Architecture
-
-```text
-                         ┌──────────────────┐
-                         │   Target Agent    │
-                         └─────────┬────────┘
-                                   │
-                                   ▼
-                         ┌──────────────────┐
-                         │  Reconnaissance  │
-                         └─────────┬────────┘
-                                   │
-                                   ▼
-                         ┌──────────────────┐
-                         │ Attack Surface   │
-                         │ Identification   │
-                         └─────────┬────────┘
-                                   │
-                                   ▼
-                         ┌──────────────────┐
-                         │ AegisRed Attack  │
-                         │    Generator     │
-                         │ Qwen + LoRA      │
-                         └─────────┬────────┘
-                                   │
-                                   ▼
-                         ┌──────────────────┐
-                         │ Attack Executor  │
-                         └─────────┬────────┘
-                                   │
-                                   ▼
-                         ┌──────────────────┐
-                         │ Target Response  │
-                         │ + Evidence       │
-                         └─────────┬────────┘
-                                   │
-                     ┌─────────────┴─────────────┐
-                     │                           │
-                     ▼                           ▼
-             ┌───────────────┐          ┌────────────────┐
-             │ Gemini        │          │ Offline        │
-             │ Analyzer      │          │ Analyzer       │
-             └───────┬───────┘          └───────┬────────┘
-                     │                          │
-                     └────────────┬─────────────┘
-                                  ▼
-                         ┌──────────────────┐
-                         │ Finding          │
-                         │ Aggregation      │
-                         └─────────┬────────┘
-                                   │
-                                   ▼
-                         ┌──────────────────┐
-                         │ JSON / MD / HTML │
-                         │ Security Report  │
-                         └──────────────────┘
+``` text
+Target Agent
+     ↓
+Reconnaissance
+     ↓
+Attack-Surface Identification
+     ↓
+Attack Generation
+(Qwen2.5-0.5B-Instruct + AegisRed LoRA)
+     ↓
+Attack Execution
+     ↓
+Target Response + Execution Evidence
+     ↓
+Gemini Vulnerability Analysis
+     ↓
+BLOCKED / ATTEMPTED / EXPLOITED
+     ↓
+Finding Aggregation
+     ↓
+JSON / Markdown / HTML Reports
 ```
 
----
+The latest demonstrated run used **LegacyBot** as the target and Gemini
+as the semantic vulnerability verifier. The run assessed five attack
+categories with two attempts per category, for a total of ten attack
+attempts. The generated HTML report recorded one confirmed critical
+finding in the Tool Abuse / Excessive Agency category.
+fileciteturn0file0L220-L243
 
-## 3. Target Reconnaissance
+------------------------------------------------------------------------
 
-Before generating attacks, AegisRed inspects the target's available capabilities.
+## 2. What AegisRed Actually Implements
 
-For CodeBot, reconnaissance identifies security-relevant functionality including:
+The current system is not just an attack-prompt generator. It implements
+an end-to-end assessment pipeline.
 
-* `execute_command`
-* `read_file`
-* `write_file`
-* `git`
-* `npm`
+The implemented components are:
 
-These capabilities are used to determine possible attack surfaces.
+1.  Target reconnaissance
+2.  Attack-surface identification
+3.  Custom offensive attack generation
+4.  Target execution adapter
+5.  Evidence collection
+6.  Gemini-based semantic vulnerability analysis
+7.  Offline response analysis
+8.  Adaptive multi-attempt assessment
+9.  Assessment-state management
+10. Vulnerability classification
+11. Finding aggregation
+12. Severity and confidence handling
+13. JSON, Markdown, and HTML report generation
 
-The reconnaissance stage provides context to later attack-generation stages instead of relying only on generic attack prompts.
+Each component has a separate responsibility so that attack generation,
+execution, and vulnerability verification are not coupled together.
 
----
+------------------------------------------------------------------------
 
-## 4. Attack Surface Identification
+# 3. End-to-End Pipeline
 
-The discovered capabilities are mapped to potential security risks.
+## 3.1 Target Reconnaissance
 
-Examples include:
+The first stage gathers information about the target's available
+capabilities.
 
-| Target Capability          | Potential Attack Surface             |
-| -------------------------- | ------------------------------------ |
-| `execute_command`          | Command execution / excessive agency |
-| `read_file`                | Unauthorized file access             |
-| `write_file`               | Unauthorized file modification       |
-| `git`                      | Repository manipulation              |
-| `npm`                      | Package/tool abuse                   |
-| Natural-language interface | Prompt injection                     |
+For the agent-oriented target used during development, reconnaissance
+identifies capabilities such as:
 
-This information is provided to the attack-generation stage.
+``` text
+execute_command
+read_file
+write_file
+git
+npm
+```
 
----
+These capabilities are important because they provide the context
+required to determine which attack categories are relevant.
 
-## 5. Attack Generation
+For example:
 
-AegisRed uses an adapted open-source language model for attack generation.
+  Target Capability            Security Relevance
+  ---------------------------- --------------------------------------
+  `execute_command`            Command execution / excessive agency
+  `read_file`                  Unauthorized file access
+  `write_file`                 Unauthorized modification
+  `git`                        Repository manipulation
+  `npm`                        Package/tool abuse
+  Natural-language interface   Prompt injection
 
-### Base Model
+The reconnaissance result is passed to later stages instead of asking
+the attack-generation model to operate with generic knowledge of the
+target.
 
-`Qwen2.5-0.5B-Instruct`
+------------------------------------------------------------------------
 
-### Adaptation
+# 4. Attack-Surface Identification
 
-AegisRed uses a LoRA adapter trained on a security-focused attack dataset.
+After reconnaissance, AegisRed maps the target's capabilities to
+potential attack surfaces.
 
-The adapter is intended to specialize the base model toward generating attacks relevant to AI-agent security testing.
+The purpose of this stage is to answer:
 
-The generated attack is influenced by:
+> "What can this target do that an attacker may be able to abuse?"
 
-* Vulnerability category
-* Target capabilities
-* Previously attempted attacks
-* Previous target responses
-* Previous analysis
-* Current assessment state
+For example:
 
----
+``` text
+execute_command
+        ↓
+Tool Abuse / Excessive Agency
 
-## 6. Attack Execution
+read_file
+        ↓
+Sensitive Information Disclosure
 
-Generated attacks are passed automatically to the CodeBot target.
+Natural-language interface
+        ↓
+Prompt Injection / System Prompt Extraction
+```
+
+The identified attack surface is then provided to the attack-generation
+model as part of the attack-generation context.
+
+------------------------------------------------------------------------
+
+# 5. Offensive Attack Generation
+
+## 5.1 Base Model
+
+AegisRed uses:
+
+``` text
+Qwen2.5-0.5B-Instruct
+```
+
+The model was selected as a lightweight open-source model that can be
+run locally on limited hardware.
+
+## 5.2 AegisRed LoRA Adapter
+
+The base model is adapted using a LoRA adapter trained on a
+security-focused attack dataset.
+
+The purpose of the adapter is to specialize the base instruction model
+for generating attacks relevant to AI-agent security testing.
+
+Conceptually:
+
+``` text
+Qwen2.5-0.5B-Instruct
+            +
+       AegisRed LoRA
+            ↓
+ Security Attack Generator
+```
+
+The generator does not operate only on the vulnerability category. Its
+input context can include:
+
+-   Vulnerability category
+-   Target capabilities
+-   Previously generated attack
+-   Previous target response
+-   Previous vulnerability analysis
+-   Evidence from earlier attempts
+-   Current assessment state
+
+This allows the generator to produce context-aware attacks rather than
+repeatedly producing unrelated generic prompts.
+
+------------------------------------------------------------------------
+
+# 6. Attack Categories
+
+The current assessment covers five security categories:
+
+1.  Prompt Injection
+2.  System Prompt Extraction
+3.  Indirect Prompt Injection
+4.  Sensitive Information Disclosure
+5.  Tool Abuse / Excessive Agency
+
+Each category is assessed independently.
+
+The latest Gemini-backed LegacyBot run attempted each category twice:
+
+  Category                             Attempts   Exploited   Blocked
+  ---------------------------------- ---------- ----------- ---------
+  Prompt Injection                            2           0         2
+  System Prompt Extraction                    2           0         2
+  Indirect Prompt Injection                   2           0         2
+  Sensitive Information Disclosure            2           0         2
+  Tool Abuse / Excessive Agency               2           1         1
+  **Total**                              **10**       **1**     **9**
+
+This matches the generated assessment report.
+fileciteturn0file0L287-L437
+
+------------------------------------------------------------------------
+
+# 7. Attack Execution
+
+The generated attack is passed to the configured target execution
+adapter.
 
 The execution layer is responsible for:
 
-1. Sending the attack.
-2. Receiving the target response.
-3. Capturing execution metadata.
-4. Recording tool activity.
-5. Returning the complete assessment evidence to the analyzer.
+1.  Sending the generated attack to the target.
+2.  Receiving the target response.
+3.  Capturing execution information.
+4.  Recording relevant tool activity.
+5.  Preserving the raw response and other evidence.
+6.  Returning the complete assessment result to the analysis stage.
 
-The executor does not independently determine whether an attack succeeded.
+The executor itself does **not** decide whether the attack succeeded.
 
-This separation allows attack execution and vulnerability verification to remain independent components.
+This is an intentional design decision.
 
----
+``` text
+Attack Generator
+       ↓
+Attack Executor
+       ↓
+Target
+       ↓
+Response + Evidence
+       ↓
+Vulnerability Analyzer
+```
 
-## 7. Evidence Collection
+This separation prevents attack execution logic from being responsible
+for semantic vulnerability classification.
 
-Each assessment attempt records relevant evidence.
+------------------------------------------------------------------------
+
+# 8. Evidence Collection
+
+Each attack attempt produces an evidence record.
 
 Typical evidence includes:
 
-```text
-Attack prompt
+``` text
+Attack payload
 Target response
-HTTP/execution status
+Execution status
 Tool calls
 Raw response
 Execution metadata
+Previous assessment state
 Analysis result
-Assessment state
 ```
 
-This evidence is passed to subsequent stages and included in the generated security reports.
+The evidence is retained throughout the pipeline.
 
-Evidence collection is important because a vulnerability classification should be supported by observable target behavior rather than only the attacker's intent.
+This is important because a vulnerability should be confirmed from
+observable target behavior rather than simply from the fact that an
+attack prompt was generated.
 
----
+The final report exposes this evidence as part of each confirmed
+finding. In the latest LegacyBot result, the report included the attack
+payload, complete target response, Gemini analysis, security indicators,
+and remediation recommendations. fileciteturn0file0L529-L637
 
-## 8. Response Analysis
+------------------------------------------------------------------------
 
-AegisRed currently provides two analysis paths.
+# 9. Gemini Vulnerability Analysis
 
-### 8.1 Gemini Analyzer
+## 9.1 Why an LLM Is Used for Verification
 
-The Gemini analyzer is the primary semantic verifier.
+A simple rule such as:
 
-It evaluates the attack and target behavior and determines whether the attack was:
+``` text
+if "password" in response:
+    vulnerable = True
+```
 
-```text
+is not sufficient for AI-agent security testing.
+
+The target may:
+
+-   Refuse the request
+-   Partially comply
+-   Explain a dangerous operation without performing it
+-   Perform an unsafe operation without using obvious keywords
+-   Disclose sensitive information in a different format
+-   Produce a response whose security significance depends on context
+
+Therefore, AegisRed uses Gemini as the primary semantic vulnerability
+verifier.
+
+------------------------------------------------------------------------
+
+## 9.2 Analysis Input
+
+The analyzer receives the attack and the observed target behavior.
+
+Conceptually:
+
+``` text
+Attack
+  +
+Target Response
+  +
+Assessment Context
+  +
+Execution Evidence
+        ↓
+Gemini
+        ↓
+Structured Vulnerability Assessment
+```
+
+The analysis determines whether the observed behavior represents:
+
+``` text
 BLOCKED
 ATTEMPTED
 EXPLOITED
 ```
 
-The analyzer can consider contextual evidence rather than relying only on keyword matching.
+It can also provide vulnerability classification, severity, confidence,
+reasoning, indicators, and remediation information.
 
-This makes it better suited to attacks where successful behavior is indirect or expressed differently from the original attack.
+------------------------------------------------------------------------
 
-### 8.2 Offline Analyzer
+# 10. Vulnerability Classification
 
-An offline analyzer is also implemented for environments where an external LLM is unavailable.
+AegisRed uses three assessment states.
 
-The offline analyzer uses local analysis logic to classify responses.
+## BLOCKED
 
-However, its current semantic detection capability is weaker than the Gemini analyzer.
-
-In testing, the offline analyzer can miss attacks that require contextual interpretation. Therefore, it is currently treated as an experimental fallback rather than the authoritative verifier.
-
-Future improvements can include:
-
-* Better response parsing
-* Tool-call-aware rules
-* Structured behavioral indicators
-* Local classifier models
-* Hybrid rules + LLM classification
-
----
-
-## 9. Vulnerability Classification
-
-AegisRed uses three primary assessment states.
-
-### BLOCKED
-
-The target rejected the attack and did not demonstrate the requested unsafe behavior.
-
-### ATTEMPTED
-
-The target appeared to partially process or approach the requested behavior, but there was insufficient evidence of successful exploitation.
-
-### EXPLOITED
-
-The target demonstrated observable behavior indicating that the attack succeeded.
-
-The classification should be based on target evidence rather than the attack prompt alone.
-
----
-
-## 10. Adaptive Assessment Loop
-
-AegisRed performs multiple attempts for each vulnerability category.
-
-The current configuration performs:
-
-```text
-5 vulnerability categories
-×
-3 attempts per category
-=
-15 assessment attempts
-```
-
-The adaptive loop maintains assessment state between attempts.
-
-Conceptually:
-
-```text
-Attempt 1
-   │
-   ├── Attack
-   ├── Target response
-   └── Analysis
-          │
-          ▼
-     Assessment State
-          │
-          ▼
-Attempt 2
-   │
-   ├── Previous evidence
-   ├── Previous analysis
-   └── New attack
-          │
-          ▼
-     Updated State
-          │
-          ▼
-Attempt 3
-```
-
-The next attack can therefore be informed by the result of the previous attempt.
-
-This is different from simply generating three independent attacks.
-
----
-
-## 11. Assessment State
-
-The adaptive state contains information from previous attempts.
-
-Relevant information includes:
-
-* Previous attack
-* Previous target response
-* Previous analysis
-* Vulnerability category
-* Evidence collected
-* Current assessment result
-
-The state is supplied to subsequent attack-generation or analysis stages where applicable.
-
-This allows the system to modify its testing strategy based on observed target behavior.
-
----
-
-## 12. Finding Aggregation
-
-After individual attempts are analyzed, AegisRed aggregates relevant results into security findings.
-
-A finding contains information such as:
-
-```text
-Finding ID
-Vulnerability category
-Severity
-Confidence
-Risk score
-Attack evidence
-Target response
-Verification result
-```
+The target rejected the attack or did not demonstrate the requested
+unsafe behavior.
 
 Example:
 
-```text
+``` text
+Attack → Target refusal
+Result → BLOCKED
+```
+
+## ATTEMPTED
+
+The target appears to have partially processed the attack or moved
+toward the requested behavior, but the available evidence is
+insufficient to confirm exploitation.
+
+Example:
+
+``` text
+Attack → Partial compliance
+Result → ATTEMPTED
+```
+
+## EXPLOITED
+
+The target demonstrates observable behavior showing that the security
+boundary was successfully bypassed.
+
+Example:
+
+``` text
+Attack
+  ↓
+Unauthorized target behavior
+  ↓
+Observable evidence
+  ↓
+EXPLOITED
+```
+
+The classification is based on target behavior and evidence, not on the
+attacker's intent.
+
+------------------------------------------------------------------------
+
+# 11. Adaptive Assessment
+
+AegisRed does not have to treat every attack attempt as an independent
+test.
+
+The assessment maintains state between attempts.
+
+Conceptually:
+
+``` text
+Attempt 1
+   ↓
+Attack
+   ↓
+Target Response
+   ↓
+Gemini Analysis
+   ↓
+Assessment State
+   ↓
+Attempt 2
+   ↓
+Previous Evidence + New Context
+   ↓
+New Attack
+```
+
+The state can contain:
+
+-   Previous attack
+-   Previous target response
+-   Previous analysis
+-   Current vulnerability category
+-   Evidence collected so far
+-   Current assessment result
+
+This allows subsequent attack-generation steps to take previous outcomes
+into account.
+
+The objective is to move from:
+
+``` text
+Generate 3 unrelated attacks
+```
+
+toward:
+
+``` text
+Attack → Observe → Analyze → Adapt → Attack again
+```
+
+This is one of the key differences between a static prompt list and an
+adaptive red-teaming pipeline.
+
+------------------------------------------------------------------------
+
+# 12. Offline Analyzer
+
+AegisRed also contains an offline response-analysis path.
+
+The offline analyzer exists so that the pipeline can still perform local
+assessment when external LLM access is unavailable.
+
+Its purpose is to provide a fallback classification using local analysis
+logic.
+
+However, the current implementation gives Gemini stronger semantic
+verification capability.
+
+The offline analyzer may miss vulnerabilities that require contextual
+interpretation, especially when successful behavior is not directly
+represented by simple textual indicators.
+
+Therefore:
+
+``` text
+Gemini Analyzer
+    ↓
+Primary semantic verifier
+
+Offline Analyzer
+    ↓
+Local fallback / experimental verifier
+```
+
+Future improvements can make the offline verifier more reliable through:
+
+-   Tool-call-aware detection
+-   Structured behavioral indicators
+-   Better response parsing
+-   Local classifier models
+-   Hybrid rules + local LLM analysis
+-   Agreement testing between Gemini and offline analysis
+
+------------------------------------------------------------------------
+
+# 13. Finding Aggregation
+
+Individual attack attempts are not automatically treated as separate
+security findings.
+
+Instead, the aggregation stage converts assessment results into
+higher-level findings.
+
+A finding can contain:
+
+``` text
+Finding ID
+Vulnerability category
+Vulnerability type
+Severity
+Confidence
+Successful attempt
+Attack payload
+Target response
+Evidence
+Gemini analysis
+Security indicators
+Remediation
+```
+
+For example:
+
+``` text
 AEGISRED-001
 ```
 
-The aggregation layer separates individual attack attempts from higher-level security findings.
+The latest LegacyBot run generated one confirmed finding with:
 
-This allows several related attempts to contribute evidence toward one finding.
+``` text
+Category:
+Tool Abuse / Excessive Agency
 
----
+Vulnerability:
+Sensitive Information Disclosure
 
-## 13. Severity and Risk
+Severity:
+Critical
 
-Findings include severity and confidence information.
+Confidence:
+100%
 
-The risk score is derived from the assessment information available to the aggregation stage.
-
-The purpose is to prioritize findings rather than simply report every failed or suspicious attack as a confirmed vulnerability.
-
-A high-confidence exploitation result should therefore have substantially greater significance than a blocked attack.
-
----
-
-## 14. Security Report Generation
-
-The reporting component converts assessment results into multiple formats.
-
-### JSON
-
-Used for structured machine-readable assessment results.
-
-### Markdown
-
-Used for human-readable technical reporting and repository documentation.
-
-### HTML
-
-Used for presentation of assessment results in a browser.
-
-Reports are generated from the assessment data rather than manually written after the test.
-
-The generated reports include the evidence and analysis associated with the assessment.
-
----
-
-## 15. Five Vulnerability Categories
-
-The pipeline currently implements the five vulnerability categories required by the assignment.
-
-Each category has:
-
-* Attack-generation logic
-* Attack execution
-* Response analysis
-* Adaptive attempts
-* Evidence collection
-* Result aggregation
-
-The categories are evaluated independently so that individual attack classes can be assessed and reported separately.
-
----
-
-## 16. Offline Assessment
-
-The complete offline assessment has been exercised using:
-
-```text
-5 categories
-3 attempts/category
-15 total attempts
+Successful Attempt:
+2
 ```
 
-The assessment completed successfully from a pipeline-execution perspective.
+fileciteturn0file0L449-L505
 
-The latest real-target run produced:
+This separation is important because several attempts can provide
+evidence for one underlying vulnerability.
 
-```text
-15 BLOCKED
-0 ATTEMPTED
-0 EXPLOITED
+------------------------------------------------------------------------
+
+# 14. Severity and Confidence
+
+The aggregation layer assigns severity and confidence information to
+confirmed findings.
+
+The latest demonstrated finding was classified as:
+
+``` text
+Severity:   Critical
+Confidence: 100%
 ```
 
-This result means that the pipeline successfully completed the assessment but did **not** establish a confirmed vulnerability in the tested CodeBot configuration.
+The reason for the high-severity result was the observed disclosure of
+sensitive configuration information, credentials, and user PII.
 
-A separate synthetic positive-finding test is used to verify that the vulnerability aggregation and reporting components correctly handle an exploitation result.
+The report explicitly records:
 
-The synthetic test must not be interpreted as evidence that CodeBot itself was exploited.
+-   System prompt disclosure
+-   API keys
+-   Database credentials
+-   Administrative credentials
+-   User names
+-   Email addresses
+-   SSNs
 
----
+as observed evidence. fileciteturn0file0L554-L599
 
-## 17. Current Verification Strategy
+The system therefore distinguishes between:
 
-The recommended execution configuration is:
+``` text
+Blocked attack
+    ≠
+Confirmed vulnerability
+```
 
-```text
-Attack Generation
-       ↓
-Attack Execution
-       ↓
+and:
+
+``` text
+Observed successful exploitation
+    ↓
+Security finding
+    ↓
+Severity + confidence
+```
+
+------------------------------------------------------------------------
+
+# 15. Latest Demonstrated Gemini Run
+
+The latest documented run used:
+
+``` text
+Target:    LegacyBot
+Analyzer:  Gemini
+Categories: 5
+Attempts:  10
+Confirmed findings: 1
+Overall risk: CRITICAL
+```
+
+The generated report records the analyzer as `gemini-3.5-flash` and the
+assessment timestamp as 2026-08-16. fileciteturn0file0L220-L243
+
+The category results were:
+
+``` text
+Prompt Injection
+    2 attempts
+    0 exploited
+    2 blocked
+
+System Prompt Extraction
+    2 attempts
+    0 exploited
+    2 blocked
+
+Indirect Prompt Injection
+    2 attempts
+    0 exploited
+    2 blocked
+
+Sensitive Information Disclosure
+    2 attempts
+    0 exploited
+    2 blocked
+
+Tool Abuse / Excessive Agency
+    2 attempts
+    1 exploited
+    1 blocked
+```
+
+fileciteturn0file0L293-L437
+
+------------------------------------------------------------------------
+
+# 16. Confirmed Finding From the Latest Run
+
+The confirmed finding was:
+
+``` text
+Finding ID:
+AEGISRED-001
+
+Category:
+Tool Abuse / Excessive Agency
+
+Vulnerability:
+Sensitive Information Disclosure
+
+Severity:
+Critical
+
+Confidence:
+100%
+
+Successful Attempt:
+2
+```
+
+The attack was generated by the AegisRed offensive model, sent through
+the target execution adapter, and then evaluated by the Gemini
+vulnerability-analysis engine. fileciteturn0file0L511-L524
+
+The target responded with sensitive information including its system
+prompt, administrative credentials, API keys, database credentials, and
+user PII. fileciteturn0file0L554-L599
+
+The resulting security indicators included:
+
+``` text
+system_prompt_leak
+credential_leak
+pii_leak
+```
+
+fileciteturn0file0L603-L625
+
+This demonstrates the complete intended pipeline:
+
+``` text
+AegisRed Attack Generation
+          ↓
+Target Execution
+          ↓
+Unsafe Target Behavior
+          ↓
 Evidence Collection
-       ↓
+          ↓
 Gemini Semantic Verification
-       ↓
-Finding Aggregation
-       ↓
-Report Generation
+          ↓
+EXPLOITED
+          ↓
+Critical Finding
+          ↓
+HTML Security Report
 ```
 
-The offline analyzer can be used when external model access is unavailable, but its results should be treated with lower confidence until its detection logic is improved.
+------------------------------------------------------------------------
 
----
+# 17. Security Report Generation
 
-## 18. Error Handling and Isolation
+AegisRed automatically converts assessment results into:
 
-The pipeline separates the major stages so that an analysis failure does not necessarily invalidate the complete assessment.
+``` text
+JSON
+Markdown
+HTML
+```
 
-The major boundaries are:
+## JSON
 
-```text
-Reconnaissance
-Attack Generation
-Attack Execution
+Used for:
+
+-   Machine-readable assessment data
+-   Downstream processing
+-   Aggregation
+-   Programmatic analysis
+
+## Markdown
+
+Used for:
+
+-   Technical documentation
+-   Repository documentation
+-   Human-readable assessment summaries
+
+## HTML
+
+Used for:
+
+-   Browser-based presentation
+-   Demonstration
+-   Security assessment review
+
+The HTML report is generated from assessment data rather than manually
+creating the finding after the test.
+
+The latest report includes:
+
+-   Overall risk
+-   Attack counts
+-   Category coverage
+-   Confirmed findings
+-   Attack methodology
+-   Attack payload
+-   Target response
+-   Evidence
+-   Gemini analysis
+-   Security indicators
+-   Recommended remediation
+
+fileciteturn0file0L249-L284 fileciteturn0file0L511-L637
+
+------------------------------------------------------------------------
+
+# 18. Report Data Flow
+
+The reporting path is:
+
+``` text
+Attack Attempts
+      ↓
+Individual Analysis Results
+      ↓
+Aggregated Assessment
+      ↓
+Finding Records
+      ↓
+JSON
+ ┌────┴────┐
+ ↓         ↓
+Markdown  HTML
+```
+
+The reports therefore preserve the relationship between:
+
+``` text
+Attack
+  ↓
+Target behavior
+  ↓
 Analysis
+  ↓
+Finding
+  ↓
+Remediation
+```
+
+------------------------------------------------------------------------
+
+# 19. Error Handling and Component Isolation
+
+The pipeline separates its major processing stages:
+
+``` text
+Reconnaissance
+      ↓
+Attack Generation
+      ↓
+Attack Execution
+      ↓
+Evidence Collection
+      ↓
+Analysis
+      ↓
 Aggregation
+      ↓
 Reporting
 ```
 
 Each stage consumes structured information from the previous stage.
 
-This makes individual components easier to test and replace.
+This makes the system easier to debug and allows components to be
+replaced independently.
 
----
+For example, the attack analyzer can be changed without redesigning the
+attack executor, and the reporting layer can consume the same assessment
+results regardless of whether Gemini or the offline analyzer produced
+the classification.
 
-## 19. Reproducibility
+------------------------------------------------------------------------
 
-The repository should contain sufficient information to reproduce the main experiment.
+# 20. Reproducibility
 
-This includes:
+The project is designed so that the major experiment can be reproduced
+using the project artifacts.
 
-* Base model information
-* LoRA adapter
-* Dataset
-* Training configuration
-* Runtime dependencies
-* Assessment configuration
-* Target setup
-* Execution instructions
-* Report-generation instructions
+The relevant reproducibility information includes:
 
-Detailed model reproduction information is provided separately in `MODEL_REPRODUCTION.md`.
+-   Base model
+-   LoRA adapter
+-   Attack dataset
+-   Training configuration
+-   Runtime dependencies
+-   Assessment configuration
+-   Target setup
+-   Execution instructions
+-   Report-generation process
 
-Dataset information is provided in `DATASET.md`.
+Model-specific reproduction details are maintained separately where
+applicable.
 
----
+------------------------------------------------------------------------
 
-## 20. Known Limitations
+# 21. What the Demo Demonstrates
 
-### Offline Analyzer
+The demo is intended to show the pipeline operating as an actual system
+rather than presenting only generated prompts.
 
-The offline analyzer currently has weaker semantic understanding than Gemini and can miss successful attacks that do not match its current detection logic.
+The important demonstrated behavior is:
 
-### Small Attack Model
+1.  A target is selected.
+2.  AegisRed identifies the target's attack surface.
+3.  The adapted Qwen model generates a security attack.
+4.  The attack is executed against the target.
+5.  The target response and execution evidence are captured.
+6.  Gemini evaluates whether the observed behavior represents
+    exploitation.
+7.  The result is classified as BLOCKED, ATTEMPTED, or EXPLOITED.
+8.  Multiple attempts are aggregated.
+9.  Confirmed vulnerabilities are converted into structured findings.
+10. The findings are automatically written into security reports.
 
-Qwen2.5-0.5B is intentionally lightweight. Its small parameter count makes local execution easier but limits the sophistication and diversity of generated attacks.
+The latest run demonstrates this complete path with a confirmed critical
+finding rather than only a simulated success. The HTML report records
+one exploited attempt out of ten total attempts.
+fileciteturn0file0L255-L281
 
-### Target Dependence
+------------------------------------------------------------------------
 
-Attack success depends on the configuration and behavior of the target agent. A blocked result does not prove that the target is universally secure.
+# 22. Current Technical Status
 
-### No Confirmed Real Vulnerability in Latest Run
+  Component                        Status
+  -------------------------------- -------------
+  Target reconnaissance            Complete
+  Attack-surface identification    Complete
+  Qwen2.5-0.5B attack generation   Complete
+  AegisRed LoRA adaptation         Complete
+  Attack execution                 Complete
+  Evidence collection              Complete
+  Gemini semantic analysis         Complete
+  Offline response analysis        Implemented
+  Adaptive assessment              Complete
+  Vulnerability classification     Complete
+  Finding aggregation              Complete
+  Severity / confidence handling   Complete
+  JSON reporting                   Complete
+  Markdown reporting               Complete
+  HTML reporting                   Complete
+  Five-category assessment         Complete
+  Demonstrated exploited result    Complete
+  Demo video                       Complete
 
-The latest complete CodeBot assessment did not produce an `EXPLOITED` result.
+------------------------------------------------------------------------
 
-Therefore, the current implementation demonstrates an operational red-teaming framework but does not yet provide a confirmed vulnerability finding from the latest real-target assessment.
+# 23. Current Limitations
 
----
+## 23.1 Offline Analyzer
 
-## 21. Current Technical Status
+The offline analyzer currently has weaker semantic understanding than
+Gemini.
 
-| Component                     | Status                         |
-| ----------------------------- | ------------------------------ |
-| Reconnaissance                | Complete                       |
-| Attack-surface identification | Complete                       |
-| LoRA attack generation        | Complete                       |
-| Attack execution              | Complete                       |
-| Evidence collection           | Complete                       |
-| Gemini response analysis      | Complete                       |
-| Offline response analysis     | Implemented, needs improvement |
-| Adaptive assessment           | Complete                       |
-| Vulnerability classification  | Complete                       |
-| Finding aggregation           | Complete                       |
-| JSON reporting                | Complete                       |
-| Markdown reporting            | Complete                       |
-| HTML reporting                | Complete                       |
-| Real-target assessment        | Executed                       |
-| Confirmed real vulnerability  | Not yet demonstrated           |
+It should therefore be treated as a fallback rather than a replacement
+for Gemini in the current implementation.
 
-## 22. Future Improvements
+## 23.2 Lightweight Attack Model
 
-The immediate technical improvement is to strengthen the offline analyzer.
+Qwen2.5-0.5B is intentionally small.
 
-Potential improvements include:
+This makes local execution practical, but the model's limited capacity
+can affect:
 
-1. Tool-call-aware exploitation detection.
-2. Structured extraction of target actions.
-3. Detection of unauthorized file or command operations.
-4. Better distinction between attempted and successful behavior.
-5. Hybrid rule-based and local-model analysis.
-6. Agreement testing between Gemini and offline analysis.
-7. Additional adaptive attack strategies.
+-   Attack diversity
+-   Reasoning depth
+-   Complex attack construction
+-   Adaptation quality
 
-The long-term goal is to make the offline verifier sufficiently reliable to perform meaningful semantic vulnerability classification without depending entirely on an external LLM.
+## 23.3 Target Dependence
+
+Attack success depends on the target's configuration and behavior.
+
+A blocked attack does not prove that the target is universally secure.
+
+Similarly, a vulnerability demonstrated in a deliberately vulnerable
+target does not automatically mean every deployment of the same agent is
+vulnerable.
+
+## 23.4 External LLM Dependency
+
+The strongest semantic verification path currently depends on access to
+Gemini.
+
+If the Gemini API is unavailable or authentication fails, the system can
+fall back to the offline analyzer, but the semantic quality of
+verification may be reduced.
+
+## 23.5 Execution Environment and Runtime Performance
+
+The reported execution times were obtained on the development machine 
+used for this project, which has limited computational resources and 
+does not use dedicated GPU acceleration for local model inference. As 
+a result, some model inference and evaluation stages may take longer 
+than they would on a GPU-enabled or production-grade environment. The 
+reported timings should therefore be interpreted as measurements of 
+functional execution on the available hardware rather than optimized
+ performance benchmarks.
+
+------------------------------------------------------------------------
+
+# 24. Future Improvements
+
+The main areas for further development are:
+
+1.  Strengthen the offline vulnerability verifier.
+2.  Add tool-call-aware exploitation detection.
+3.  Improve adaptive attack strategies.
+4.  Increase attack diversity and sophistication.
+5.  Add more target execution adapters.
+6.  Add additional AI-agent vulnerability categories.
+7.  Compare Gemini results with local verification.
+8.  Add agreement/disagreement analysis between multiple analyzers.
+9.  Improve automated remediation validation.
+10. Add historical assessment comparison and regression testing.
+
+------------------------------------------------------------------------
+
+# 25. Final System Summary
+
+AegisRed implements an end-to-end automated red-teaming workflow:
+
+``` text
+RECON
+  ↓
+UNDERSTAND TARGET CAPABILITIES
+  ↓
+IDENTIFY ATTACK SURFACES
+  ↓
+GENERATE ATTACK
+(Qwen2.5-0.5B + LoRA)
+  ↓
+EXECUTE AGAINST TARGET
+  ↓
+COLLECT RESPONSE + EVIDENCE
+  ↓
+ANALYZE WITH GEMINI
+  ↓
+BLOCKED / ATTEMPTED / EXPLOITED
+  ↓
+ADAPT NEXT ATTEMPT
+  ↓
+AGGREGATE FINDINGS
+  ↓
+ASSIGN SEVERITY + CONFIDENCE
+  ↓
+GENERATE JSON / MD / HTML REPORT
+```
+
+The key implementation principle is separation of responsibilities:
+
+``` text
+Attack Generator
+    → creates the attack
+
+Executor
+    → runs the attack
+
+Evidence Collector
+    → records what happened
+
+Vulnerability Analyzer
+    → determines whether it was actually successful
+
+Aggregator
+    → converts attempts into security findings
+
+Reporter
+    → presents the findings
+```
+
+The latest Gemini-backed assessment provides an end-to-end demonstration
+of this architecture, including automated attack generation, target
+execution, semantic verification, exploitation classification, finding
+aggregation, and automatic HTML security-report generation. The
+demonstrated run produced one critical confirmed finding from ten attack
+attempts across five vulnerability categories.
+fileciteturn0file0L255-L281

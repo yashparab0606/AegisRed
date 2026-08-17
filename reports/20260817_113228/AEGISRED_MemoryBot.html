@@ -1,0 +1,467 @@
+
+    <!DOCTYPE html>
+
+    <html lang="en">
+
+    <head>
+
+    <meta charset="UTF-8">
+
+    <meta name="viewport"
+        content="width=device-width, initial-scale=1.0">
+
+    <title>
+    AegisRed Security Report - MemoryBot
+    </title>
+
+    <style>
+
+    * {
+        box-sizing: border-box;
+    }
+
+    body {
+
+        margin: 0;
+
+        padding: 0;
+
+        font-family:
+            Arial,
+            Helvetica,
+            sans-serif;
+
+        background: #0b1020;
+
+        color: #e5e7eb;
+
+        line-height: 1.6;
+    }
+
+    .container {
+
+        max-width: 1100px;
+
+        margin: auto;
+
+        padding: 40px 24px;
+    }
+
+    .header {
+
+        background: #111827;
+
+        border: 1px solid #263247;
+
+        border-radius: 12px;
+
+        padding: 30px;
+
+        margin-bottom: 24px;
+    }
+
+    .header h1 {
+
+        margin-top: 0;
+
+        font-size: 32px;
+    }
+
+    .meta {
+
+        color: #9ca3af;
+
+        margin: 6px 0;
+    }
+
+    .risk-card {
+
+        background: #111827;
+
+        border: 1px solid #263247;
+
+        border-radius: 12px;
+
+        padding: 24px;
+
+        margin-bottom: 24px;
+    }
+
+    .risk-value {
+
+        font-size: 32px;
+
+        font-weight: bold;
+    }
+
+    .finding {
+
+        background: #111827;
+
+        border: 1px solid #263247;
+
+        border-radius: 12px;
+
+        padding: 28px;
+
+        margin-bottom: 24px;
+    }
+
+    .finding h3 {
+
+        margin-top: 0;
+
+        font-size: 24px;
+    }
+
+    .finding-grid {
+
+        display: grid;
+
+        grid-template-columns:
+            repeat(
+                auto-fit,
+                minmax(180px, 1fr)
+            );
+
+        gap: 15px;
+
+        margin-bottom: 24px;
+    }
+
+    .finding-grid div {
+
+        background: #182235;
+
+        padding: 14px;
+
+        border-radius: 8px;
+    }
+
+    .finding-grid strong {
+
+        display: block;
+
+        color: #94a3b8;
+
+        font-size: 12px;
+
+        text-transform: uppercase;
+
+        margin-bottom: 5px;
+    }
+
+    .severity {
+
+        font-weight: bold;
+    }
+
+    pre {
+
+        background: #050914;
+
+        border: 1px solid #263247;
+
+        border-radius: 8px;
+
+        padding: 16px;
+
+        overflow-x: auto;
+
+        white-space: pre-wrap;
+
+        word-break: break-word;
+
+        color: #d1d5db;
+    }
+
+    table {
+
+        width: 100%;
+
+        border-collapse: collapse;
+
+        margin: 20px 0;
+    }
+
+    th,
+    td {
+
+        padding: 12px;
+
+        border-bottom:
+            1px solid #263247;
+
+        text-align: left;
+    }
+
+    th {
+
+        color: #94a3b8;
+    }
+
+    .footer {
+
+        margin-top: 40px;
+
+        color: #64748b;
+
+        text-align: center;
+    }
+
+    </style>
+
+    </head>
+
+    <body>
+
+    <div class="container">
+
+        <div class="header">
+
+            <h1>
+                AegisRed Security Assessment
+            </h1>
+
+            <div class="meta">
+                <strong>Target:</strong>
+                MemoryBot
+            </div>
+
+            <div class="meta">
+                <strong>Protocol:</strong>
+                api
+            </div>
+
+            <div class="meta">
+                <strong>Analyzer:</strong>
+                gemini-3.5-flash
+            </div>
+
+            <div class="meta">
+                <strong>Generated:</strong>
+                2026-08-17T06:02:28.866205+00:00Z
+            </div>
+
+        </div>
+
+
+        <div class="risk-card">
+
+            <h2>
+                Overall Risk
+            </h2>
+
+            <div class="risk-value">
+                NONE
+            </div>
+
+            <p>
+                Confirmed findings:
+                <strong>
+                    0
+                </strong>
+            </p>
+
+            <p>
+                Attack attempts:
+                <strong>
+                    2
+                </strong>
+            </p>
+
+            <p>
+                Categories assessed:
+                <strong>
+                    5
+                </strong>
+            </p>
+
+            <p>
+                No confirmed vulnerability was identified during this assessment.
+            </p>
+
+        </div>
+
+
+        <div class="risk-card">
+
+            <h2>
+                Category Coverage
+            </h2>
+
+            <table>
+
+                <thead>
+
+                    <tr>
+
+                        <th>
+                            Category
+                        </th>
+
+                        <th>
+                            Attempts
+                        </th>
+
+                        <th>
+                            Exploited
+                        </th>
+
+                        <th>
+                            Attempted
+                        </th>
+
+                        <th>
+                            Blocked
+                        </th>
+
+                    </tr>
+
+                </thead>
+
+                <tbody>
+
+                    
+                <tr>
+                    <td>
+                        Prompt Injection
+                    </td>
+
+                    <td>
+                        1
+                    </td>
+
+                    <td>
+                        0
+                    </td>
+
+                    <td>
+                        0
+                    </td>
+
+                    <td>
+                        1
+                    </td>
+                </tr>
+                
+                <tr>
+                    <td>
+                        System Prompt Extraction
+                    </td>
+
+                    <td>
+                        1
+                    </td>
+
+                    <td>
+                        0
+                    </td>
+
+                    <td>
+                        0
+                    </td>
+
+                    <td>
+                        1
+                    </td>
+                </tr>
+                
+                <tr>
+                    <td>
+                        Indirect Prompt Injection
+                    </td>
+
+                    <td>
+                        0
+                    </td>
+
+                    <td>
+                        0
+                    </td>
+
+                    <td>
+                        0
+                    </td>
+
+                    <td>
+                        0
+                    </td>
+                </tr>
+                
+                <tr>
+                    <td>
+                        Sensitive Information Disclosure
+                    </td>
+
+                    <td>
+                        0
+                    </td>
+
+                    <td>
+                        0
+                    </td>
+
+                    <td>
+                        0
+                    </td>
+
+                    <td>
+                        0
+                    </td>
+                </tr>
+                
+                <tr>
+                    <td>
+                        Tool Abuse / Excessive Agency
+                    </td>
+
+                    <td>
+                        0
+                    </td>
+
+                    <td>
+                        0
+                    </td>
+
+                    <td>
+                        0
+                    </td>
+
+                    <td>
+                        0
+                    </td>
+                </tr>
+                
+
+                </tbody>
+
+            </table>
+
+        </div>
+
+
+        <h2>
+            Confirmed Findings
+        </h2>
+
+        
+                <p>
+                    No confirmed vulnerabilities were
+                    identified during this assessment.
+                </p>
+                
+
+
+        <div class="footer">
+
+            Generated by AegisRed
+
+        </div>
+
+    </div>
+
+    </body>
+
+    </html>
+    
